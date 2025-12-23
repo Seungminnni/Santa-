@@ -4,6 +4,9 @@
 import time
 import random
 import sys
+import os
+import subprocess
+import platform
 import argparse
 from typing import List
 try:
@@ -215,6 +218,19 @@ def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25
 
         start_time = time.time()
         frame = 0
+        # 음악 파일 경로 (하드코딩)
+        MUSIC_PATH = '/Users/seungmin/Desktop/tree/Santa-/JINGLE_BELLS .mp3'
+        music_proc = None
+        # 자동 재생 (macOS에서는 afplay 사용)
+        try:
+            if os.path.exists(MUSIC_PATH):
+                if platform.system() == 'Darwin':
+                    music_proc = subprocess.Popen(['afplay', MUSIC_PATH])
+                else:
+                    # Linux/other: try ffplay
+                    music_proc = subprocess.Popen(['ffplay', '-nodisp', '-autoexit', '-loglevel', 'quiet', MUSIC_PATH])
+        except Exception as e:
+            print(f"Warning: could not start music: {e}")
 
         # Rich가 설치되어 있으면 Live 업데이트로 한 번만 그린 뒤 내부만 업데이트
         if Console is not None and Live is not None and Text is not None:
@@ -320,6 +336,13 @@ def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25
                     else:
                         live.update(msg)
                     time.sleep(2.0)
+                    # stop music if playing
+                    try:
+                        if music_proc is not None and hasattr(music_proc, 'terminate'):
+                            music_proc.terminate()
+                            music_proc.wait(timeout=1)
+                    except Exception:
+                        pass
         else:
             # Rich가 없으면 기존 방식(fallback)
             # 빌드 애니메이션 (폴백)
@@ -410,6 +433,13 @@ def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25
                 clear_screen()
                 print(f"\n{Colors.BOLD}{Colors.GREEN}🎄 Happy Solo Christmas 🎄{Colors.RESET}\n")
                 time.sleep(2.0)
+                # stop music if playing
+                try:
+                    if music_proc is not None and hasattr(music_proc, 'terminate'):
+                        music_proc.terminate()
+                        music_proc.wait(timeout=1)
+                except Exception:
+                    pass
 
             twinkle_enabled = (not build) or auto_twinkle
             while time.time() - start_time < duration:
