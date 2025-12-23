@@ -197,7 +197,7 @@ def render_full_rich(tree_data, animation_frame: int):
         return Text.from_ansi(ansi_str)
     return ansi_str
 
-def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25, speed: float = 0.5, max_width: int = 50, build: bool = False, build_speed: float = 0.02, auto_twinkle: bool = False, gap: int = 1, build_mode: str = 'sequential', seed: int | None = None):
+def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25, speed: float = 0.5, max_width: int = 50, build: bool = False, build_speed: float = 0.02, auto_twinkle: bool = False, gap: int = 1, build_mode: str = 'sequential', seed: int | None = None, teardown: bool = False, teardown_speed: float = 0.02, teardown_mode: str = 'random'):
     """크리스마스 트리 애니메이션"""
     try:
         # 한 번만 트리 구조 생성
@@ -273,6 +273,53 @@ def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25
 
                     frame += 1
                     time.sleep(speed)
+
+                # teardown phase: remove lights/trunk/star in order
+                if teardown:
+                    # collect all removable positions
+                    positions = []
+                    for r_idx, row in enumerate(tree_data):
+                        if row.get('chars'):
+                            for c_idx, _ in enumerate(row['chars']):
+                                positions.append(('char', r_idx, c_idx))
+                        if row.get('trunk'):
+                            positions.append(('trunk', r_idx))
+                        if row.get('star'):
+                            positions.append(('star', r_idx))
+
+                    if teardown_mode == 'random':
+                        if seed is not None:
+                            random.seed(seed)
+                            random.shuffle(positions)
+                        elif np is not None:
+                            positions = list(np.random.permutation(positions))
+                        else:
+                            random.shuffle(positions)
+                    else:
+                        # reverse order: remove from bottom to top
+                        positions = list(reversed(positions))
+
+                    for pos in positions:
+                        if pos[0] == 'char':
+                            _, r_idx, c_idx = pos
+                            tree_data[r_idx]['chars'][c_idx]['visible'] = False
+                        elif pos[0] == 'trunk':
+                            _, r_idx = pos
+                            tree_data[r_idx]['visible'] = False
+                        elif pos[0] == 'star':
+                            _, r_idx = pos
+                            tree_data[r_idx]['visible'] = False
+
+                        live.update(render_full_rich(tree_data, 0))
+                        time.sleep(teardown_speed)
+
+                    # final message
+                    msg = f"\n{Colors.BOLD}{Colors.GREEN}🎄 Happy Solo Christmas 🎄{Colors.RESET}\n"
+                    if Text is not None:
+                        live.update(Text.from_ansi(msg))
+                    else:
+                        live.update(msg)
+                    time.sleep(2.0)
         else:
             # Rich가 없으면 기존 방식(fallback)
             # 빌드 애니메이션 (폴백)
@@ -318,6 +365,52 @@ def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25
                     print(print_tree_with_lights(tree_data, 0))
                     time.sleep(build_speed)
 
+            # teardown phase (fallback)
+            if teardown:
+                positions = []
+                for r_idx, row in enumerate(tree_data):
+                    if row.get('chars'):
+                        for c_idx, _ in enumerate(row['chars']):
+                            positions.append(('char', r_idx, c_idx))
+                    if row.get('trunk'):
+                        positions.append(('trunk', r_idx))
+                    if row.get('star'):
+                        positions.append(('star', r_idx))
+
+                if teardown_mode == 'random':
+                    if seed is not None:
+                        random.seed(seed)
+                        random.shuffle(positions)
+                    elif np is not None:
+                        positions = list(np.random.permutation(positions))
+                    else:
+                        random.shuffle(positions)
+                else:
+                    positions = list(reversed(positions))
+
+                for pos in positions:
+                    if pos[0] == 'char':
+                        _, r_idx, c_idx = pos
+                        tree_data[r_idx]['chars'][c_idx]['visible'] = False
+                    elif pos[0] == 'trunk':
+                        _, r_idx = pos
+                        tree_data[r_idx]['visible'] = False
+                    elif pos[0] == 'star':
+                        _, r_idx = pos
+                        tree_data[r_idx]['visible'] = False
+
+                    clear_screen()
+                    title = f"{Colors.BOLD}{Colors.GREEN}🎄 Merry Christmas! 🎄{Colors.RESET}"
+                    print(title)
+                    print()
+                    print(print_tree_with_lights(tree_data, 0))
+                    time.sleep(teardown_speed)
+
+                # final message (fallback)
+                clear_screen()
+                print(f"\n{Colors.BOLD}{Colors.GREEN}🎄 Happy Solo Christmas 🎄{Colors.RESET}\n")
+                time.sleep(2.0)
+
             twinkle_enabled = (not build) or auto_twinkle
             while time.time() - start_time < duration:
                 clear_screen()
@@ -358,8 +451,11 @@ if __name__ == '__main__':
     parser.add_argument('--build-speed', type=float, default=0.02, help='빌드 애니메이션 속도 (초)')
     parser.add_argument('--auto-twinkle', action='store_true', help='빌드 후 자동으로 조명이 반짝이게 함')
     parser.add_argument('--gap', type=int, default=1, help='두 삼각형 사이 공백 줄 수 (double 모드)')
+    parser.add_argument('--teardown', action='store_true', help='애니메이션 종료 시 트리를 무작위로 사라지게 함')
+    parser.add_argument('--teardown-speed', type=float, default=0.02, help='트리 사라짐 속도 (초)')
+    parser.add_argument('--teardown-mode', choices=['random', 'reverse'], default='random', help='트리를 사라지게 하는 순서')
     parser.add_argument('--build-mode', choices=['sequential', 'random'], default='sequential', help='빌드 순서: sequential 또는 random')
     parser.add_argument('--seed', type=int, default=None, help='빌드 무작위 시드 (선택적)')
     args = parser.parse_args()
 
-    animate_tree(duration=args.duration, mode=args.mode, density=args.density, speed=args.speed, max_width=args.width, build=args.build, build_speed=args.build_speed, auto_twinkle=args.auto_twinkle, gap=args.gap, build_mode=args.build_mode, seed=args.seed)
+    animate_tree(duration=args.duration, mode=args.mode, density=args.density, speed=args.speed, max_width=args.width, build=args.build, build_speed=args.build_speed, auto_twinkle=args.auto_twinkle, gap=args.gap, build_mode=args.build_mode, seed=args.seed, teardown=args.teardown, teardown_speed=args.teardown_speed, teardown_mode=args.teardown_mode)
