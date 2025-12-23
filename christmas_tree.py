@@ -14,6 +14,10 @@ except Exception:
     Console = None
     Live = None
     Text = None
+try:
+    import numpy as np
+except Exception:
+    np = None
 
 # 터미널 색상 코드
 class Colors:
@@ -193,7 +197,7 @@ def render_full_rich(tree_data, animation_frame: int):
         return Text.from_ansi(ansi_str)
     return ansi_str
 
-def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25, speed: float = 0.5, max_width: int = 50, build: bool = False, build_speed: float = 0.02, auto_twinkle: bool = False, gap: int = 1):
+def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25, speed: float = 0.5, max_width: int = 50, build: bool = False, build_speed: float = 0.02, auto_twinkle: bool = False, gap: int = 1, build_mode: str = 'sequential', seed: int | None = None):
     """크리스마스 트리 애니메이션"""
     try:
         # 한 번만 트리 구조 생성
@@ -219,13 +223,25 @@ def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25
             with Live(render_full_rich(tree_data, 0), console=console, refresh_per_second=24) as live:
                 # 빌드 애니메이션: 차례대로 visible 켜기
                 if build:
-                    positions = []
-                    # 모든 별(조명/별표) 위치 수집
+                    char_positions = []
                     for r_idx, row in enumerate(tree_data):
                         if row.get('chars'):
                             for c_idx, _ in enumerate(row['chars']):
-                                positions.append(('char', r_idx, c_idx))
-                    # 트리 줄기와 별은 마지막에 추가해서 맨 마지막에 나타나게 함
+                                char_positions.append((r_idx, c_idx))
+
+                    # shuffle character positions if requested
+                    if build_mode == 'random':
+                        if seed is not None:
+                            random.seed(seed)
+                            random.shuffle(char_positions)
+                        elif np is not None:
+                            char_positions = list(np.random.permutation(char_positions))
+                        else:
+                            random.shuffle(char_positions)
+
+                    positions = [('char', r, c) for (r, c) in char_positions]
+
+                    # append trunk and star last
                     for r_idx, row in enumerate(tree_data):
                         if row.get('trunk'):
                             positions.append(('trunk', r_idx))
@@ -261,11 +277,22 @@ def animate_tree(duration: int = 60, mode: str = 'double', density: float = 0.25
             # Rich가 없으면 기존 방식(fallback)
             # 빌드 애니메이션 (폴백)
             if build:
-                positions = []
+                char_positions = []
                 for r_idx, row in enumerate(tree_data):
                     if row.get('chars'):
                         for c_idx, _ in enumerate(row['chars']):
-                            positions.append(('char', r_idx, c_idx))
+                            char_positions.append((r_idx, c_idx))
+
+                if build_mode == 'random':
+                    if seed is not None:
+                        random.seed(seed)
+                        random.shuffle(char_positions)
+                    elif np is not None:
+                        char_positions = list(np.random.permutation(char_positions))
+                    else:
+                        random.shuffle(char_positions)
+
+                positions = [('char', r, c) for (r, c) in char_positions]
                 for r_idx, row in enumerate(tree_data):
                     if row.get('trunk'):
                         positions.append(('trunk', r_idx))
@@ -331,6 +358,8 @@ if __name__ == '__main__':
     parser.add_argument('--build-speed', type=float, default=0.02, help='빌드 애니메이션 속도 (초)')
     parser.add_argument('--auto-twinkle', action='store_true', help='빌드 후 자동으로 조명이 반짝이게 함')
     parser.add_argument('--gap', type=int, default=1, help='두 삼각형 사이 공백 줄 수 (double 모드)')
+    parser.add_argument('--build-mode', choices=['sequential', 'random'], default='sequential', help='빌드 순서: sequential 또는 random')
+    parser.add_argument('--seed', type=int, default=None, help='빌드 무작위 시드 (선택적)')
     args = parser.parse_args()
 
-    animate_tree(duration=args.duration, mode=args.mode, density=args.density, speed=args.speed, max_width=args.width, build=args.build, build_speed=args.build_speed, auto_twinkle=args.auto_twinkle, gap=args.gap)
+    animate_tree(duration=args.duration, mode=args.mode, density=args.density, speed=args.speed, max_width=args.width, build=args.build, build_speed=args.build_speed, auto_twinkle=args.auto_twinkle, gap=args.gap, build_mode=args.build_mode, seed=args.seed)
